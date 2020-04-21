@@ -91,18 +91,19 @@ class Partition:
 
         return self.n_records
 
-    def filter(self, fn: str, outfile: str, verbose: bool = True):
+    def filter(self, fn: str, outfile: str, delete_on_empty: bool = False, verbose: bool = True):
         """Filter function
         
         Args:
             fn (str): [description]
             outfile (str): [description]
+            delete_on_empty (bool, optional): delete the partition if there is no record. Defaults to False
             verbose (bool, optional): [description]. Defaults to True.
         """
         fn = get_func_by_name(fn)
         outfile = self._get_outfile(outfile)
 
-        with self._open() as f, PartitionWriter(outfile) as g:
+        with self._open() as f, PartitionWriter(outfile, on_close_delete_if_empty=delete_on_empty) as g:
             for line in tqdm(f, total=self.n_records) if verbose else f:
                 if fn(self.deser_fn(line)):
                     g.write(line)

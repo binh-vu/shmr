@@ -80,32 +80,23 @@ class ListPartition:
 
         writer = None
 
-        record_counter = 0
-        last_record_counter = 0
-
         with (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
             try:
-                writer = PartitionWriter(outfile % part_counter).open()
+                writer = PartitionWriter(outfile % part_counter, on_close_delete_if_empty=True).open()
                 for inpart in self.partitions:
                     with inpart._open() as f:
                         for i, line in enumerate(f):
                             writer.write(line)
                             pbar.update(1)
-                            record_counter += 1
 
                             if (i + 1) % records_per_partition == 0:
                                 writer.close()
                                 part_counter += 1
-                                writer = PartitionWriter(outfile % part_counter).open()
-                                last_record_counter = record_counter
+                                writer = PartitionWriter(outfile % part_counter, on_close_delete_if_empty=True).open()
 
             finally:
                 if writer is not None:
                     writer.close()
-
-                if last_record_counter == record_counter:
-                    # delete last empty file
-                    writer.delete()
 
     def concat(self, outfile: str, verbose: bool = True):
         """Concatenate partitions to one file
@@ -155,5 +146,25 @@ class ListPartition:
                         record = inpart.deser_fn(line)
                         accum = fn(record, accum)
                         pbar.update(1)
+
             g.write(self.ser_fn(accum))
             g.write_new_line()
+
+    def head(self, n_rows: int):
+        """Print first n rows
+
+        Args:
+            n_rows (int): number of rows to print
+        """
+        count = 0
+        for inpart in self.partitions:
+            if count >= n_rows:
+                break
+
+            with inpart._open() as f:
+                for line in f:
+                    print(line)
+                    count += 1
+
+                    if count >= n_rows:
+                        break

@@ -98,4 +98,5 @@ class fake_tqdm:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        return self
+        # return False otherwise Python will suppress the exception
+        return False

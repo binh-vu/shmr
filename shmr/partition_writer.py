@@ -7,13 +7,14 @@ from shmr.misc import get_open_fn
 
 
 class PartitionWriter:
-    def __init__(self, outfile: str):
+    def __init__(self, outfile: str, on_close_delete_if_empty: bool = False):
         if not Path(outfile).parent.exists():
             raise ValueError(f"Output directory does not exist: {Path(outfile).parent}")
 
         self.outfile = outfile
         self.n_records = 0
         self.writer = None
+        self.on_close_delete_if_empty = on_close_delete_if_empty
 
     def __enter__(self):
         return self.open()
@@ -25,6 +26,7 @@ class PartitionWriter:
         if self.writer is not None:
             raise ValueError("Cannot open the writer twice")
 
+        self.n_records = 0
         self.writer = get_open_fn(self.outfile)(self.outfile, "wb")
         return self
 
@@ -40,11 +42,19 @@ class PartitionWriter:
             self.writer.close()
             self.writer = None
             PartitionMetadata(self.outfile).write({"n_records": self.n_records})
-            self.n_records = 0
+
+        if self.on_close_delete_if_empty:
+            self.delete_if_empty()
+
+    def delete_if_empty(self):
+        if self.writer is not None:
+            raise Exception("You need to close the file first")
+        if self.n_records == 0:
+            self.delete()
 
     def delete(self):
         if os.path.exists(self.outfile):
-            os.remove(str(self.outfile))
+            os.remove(self.outfile)
         PartitionMetadata(self.outfile).delete()
 
 

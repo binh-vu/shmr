@@ -33,6 +33,12 @@ def parse_argval(val: str):
         return val
 
 
+def parse_bool(val: str):
+    if val not in {"false", "true", "True", "False"}:
+        raise ValueError(f"Invalid boolean value: {val}")
+    return val.lower() == 'true'
+
+
 def build_subparser(subparsers, program, fn, ignore_params: Set[str]):
     global FUNCTIONS
 
@@ -63,8 +69,13 @@ def build_subparser(subparsers, program, fn, ignore_params: Set[str]):
         elif param.annotation in (str, int, float):
             kwargs['type'] = param.annotation
         elif param.annotation is bool:
-            assert 'default' not in kwargs, "Providing default value for boolean make the rules quite complicated and hard to remember"
-            kwargs['action'] = 'store_true'
+            if param.default is False:
+                # special case to make providing boolean values easier
+                kwargs['required'] = False
+                kwargs['action'] = 'store_true'
+            else:
+                # if this is not default to be False, then users has to provide the value explicitly
+                kwargs['type'] = 'parse_bool'
         elif param.annotation in (Optional[str], Optional[int], Optional[float]):
             param_type = param.annotation.__args__[0]
             assert param_type in (str, int, float)
