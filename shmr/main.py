@@ -10,6 +10,7 @@ from fastnumbers import isfloat
 from shmr.misc import get_func_by_name
 from shmr.partition import Partition
 from shmr.partitions import ListPartition
+from shmr.version import __version__
 
 CLASSES = {
     "partition": Partition,
@@ -23,6 +24,8 @@ def parse_argval(val: str):
         return int(val)
     if isfloat(val):
         return float(val)
+    if val == "set()":
+        return set()
 
     try:
         return orjson.loads(val)
@@ -78,7 +81,7 @@ def build_subparser(subparsers, program, fn, ignore_params: Set[str]):
 def build_parser():
     global CLASSES
 
-    parser = ArgumentParser(prog="sh map-reduce")
+    parser = ArgumentParser(prog=f"sh map-reduce ({__version__})")
     parser.add_argument("-v", "--verbose", action='count', default=0, help="")
     parser.add_argument("-i", "--infile", required=True,
                         help="the path to one partition or list of partitions depend on the sub-program")
@@ -117,6 +120,7 @@ def main(args):
     ser_fn = get_func_by_name(args.pop("ser_fn"))
 
     if verbose > 1:
+        print(f">>> run sh map-reduce version {__version__}")
         print(f">>> build parser and parsing arguments takes {end - start:.03f}s")
 
     classname, method_name = command.rsplit(".", 1)

@@ -2,11 +2,16 @@ import os
 
 from setuptools import setup, find_packages
 
+# load versions
+__version__ = None
+exec(open("shmr/version.py").read())
+assert __version__ is not None
+
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "README.md"), "r", encoding="utf-8") as f:
     long_description = f.read()
 
 setup(name="shmr",
-      version='1.0.0',
+      version=__version__,
       packages=find_packages(),
       description="A set of map-reduce high-order functions to use with parallel or xargs",
       long_description=long_description,

@@ -42,6 +42,11 @@ class PartitionWriter:
             PartitionMetadata(self.outfile).write({"n_records": self.n_records})
             self.n_records = 0
 
+    def delete(self):
+        if os.path.exists(self.outfile):
+            os.remove(str(self.outfile))
+        PartitionMetadata(self.outfile).delete()
+
 
 class PartitionMetadata:
     def __init__(self, partition_path: str):
@@ -61,3 +66,7 @@ class PartitionMetadata:
     def write(self, metadata: dict):
         with open(self.outfile, "wb") as f:
             f.write(orjson.dumps(metadata, option=orjson.OPT_INDENT_2))
+
+    def delete(self):
+        if os.path.exists(self.outfile):
+            os.remove(self.outfile)

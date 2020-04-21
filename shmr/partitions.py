@@ -1,21 +1,19 @@
 import contextlib
 import glob
-import pickle
-from dataclasses import dataclass
+from math import ceil
 from pathlib import Path
 from typing import Optional, List, Callable, Any
 
-import orjson
 from tqdm.auto import tqdm
 
-from shmr.misc import get_filepath_template, get_open_fn
+from shmr.misc import get_filepath_template, get_func_by_name, fake_tqdm
 from shmr.partition import Partition
 from shmr.partition_writer import PartitionWriter
 
 
 class ListPartition:
 
-    def __init__(self, infile: str, skip_nrows: int, deser_fn: Callable[[bytes], Any], ser_fn: Callable[[Any], bytes]):
+    def __init__(self, infile: str, deser_fn: Callable[[bytes], Any], ser_fn: Callable[[Any], bytes], skip_nrows: int):
         partitions = []
         for file_path in sorted(glob.glob(infile)):
             partitions.append(Partition(file_path, deser_fn, ser_fn, skip_nrows))
@@ -23,6 +21,7 @@ class ListPartition:
         if len(partitions) == 0:
             raise ValueError(f"No partition matches the pattern: {infile}")
         self.partitions: List[Partition] = partitions
+        self.ser_fn = ser_fn
         self.size = self._size()
 
     def _size(self) -> Optional[int]:
@@ -32,6 +31,27 @@ class ListPartition:
                 return None
             size += part.n_records
         return size
+
+    def count(self, outfile: Optional[str] = None, verbose: bool = True):
+        """Count the number of records in all partitions
+
+        Args:
+            outfile (Optional[str], optional): output file to write to the value to if it is not None. if outfile is stdout we will print to stdout
+            verbose (bool): print the execution progress
+        """
+        if self.size is None:
+            for inpart in self.partitions:
+                inpart.count(verbose=verbose)
+            self.size = self._size()
+
+        if outfile is not None:
+            if outfile == "stdout":
+                print(self.size)
+            else:
+                with open(outfile, "w") as f:
+                    f.write(str(self.size))
+
+        return self.size
 
     def coalesce(self, outfile: str, records_per_partition: Optional[int] = None,
                  num_partitions: Optional[int] = None, verbose: bool = True):
@@ -53,39 +73,87 @@ class ListPartition:
 
         if records_per_partition is None:
             assert num_partitions is not None
-            # TODO: cal the records_per_partition based on num_partitions
+            assert self.size is not None, "Cannot determine the records per partition based on number of partitions because of unknown size of partitions. Consider running partition.count or provide the `records_per_partition` parameter"
+            records_per_partition = ceil(self.size / num_partitions)
 
         part_counter = 0
-        start = 0
 
         writer = None
-        try:
-            writer = PartitionWriter(outfile % part_counter).open()
-            for inpart in self.partitions:
-                with inpart._open() as f:
-                    for i, line in (tqdm(enumerate(f), initial=start, total=self.size) if verbose else enumerate(f)):
-                        if (i + 1) % records_per_partition == 0:
-                            writer.close()
-                            part_counter += 1
-                            writer = PartitionWriter(outfile % part_counter).open()
-                        writer.write(line)
-        finally:
-            if writer is not None:
-                writer.close()
+
+        record_counter = 0
+        last_record_counter = 0
+
+        with (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
+            try:
+                writer = PartitionWriter(outfile % part_counter).open()
+                for inpart in self.partitions:
+                    with inpart._open() as f:
+                        for i, line in enumerate(f):
+                            writer.write(line)
+                            pbar.update(1)
+                            record_counter += 1
+
+                            if (i + 1) % records_per_partition == 0:
+                                writer.close()
+                                part_counter += 1
+                                writer = PartitionWriter(outfile % part_counter).open()
+                                last_record_counter = record_counter
+
+            finally:
+                if writer is not None:
+                    writer.close()
+
+                if last_record_counter == record_counter:
+                    # delete last empty file
+                    writer.delete()
 
     def concat(self, outfile: str, verbose: bool = True):
-        """Concatenate fdsfdsfsd
+        """Concatenate partitions to one file
 
         Args:
-            outfile: flksdjfldskj
-            verbose: fdksljfldskj
+            outfile (str): path to output partition
+            verbose (bool): log execution progress. Defaults to True
 
         Returns:
-            fdsfsd
+            ValueError: if the output directory does not exist
         """
-        with PartitionWriter(outfile).open() as g:
-            start = 0
+        with PartitionWriter(outfile) as g, (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
             for inpart in self.partitions:
                 with inpart._open() as f:
-                    for line in (tqdm(f, initial=start, total=self.size) if verbose else f):
+                    for line in f:
                         g.write(line)
+                        pbar.update(1)
+
+    def reduce(self, fn: str, outfile: str, init_val: Any = None, verbose: bool = True):
+        """Reduce
+
+        Args:
+            fn (str): [description]
+            outfile (str): [description]
+            init_val (Any): [description]
+            verbose (bool, optional): [description]. Defaults to True.
+        """
+        fn = get_func_by_name(fn)
+        if init_val is not None:
+            accum = init_val
+        else:
+            accum = None
+
+        with PartitionWriter(outfile) as g, (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
+            for inpart in self.partitions:
+                with inpart._open() as f:
+                    if accum is None:
+                        try:
+                            record = inpart.deser_fn(next(f))
+                            accum = fn(record)
+                            if verbose:
+                                pbar.update(1)
+                        except StopIteration:
+                            pass
+
+                    for line in f:
+                        record = inpart.deser_fn(line)
+                        accum = fn(record, accum)
+                        pbar.update(1)
+            g.write(self.ser_fn(accum))
+            g.write_new_line()

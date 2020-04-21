@@ -40,17 +40,19 @@ def get_filepath_template(file_template: str):
     -------
     """
     if file_template.find("*") != -1:
-        parts = file_template.split("*")
+        parts = file_template.rsplit("*", 1)
     elif file_template.find("{}") != -1:
         parts = file_template.split("{}")
     else:
         parts = file_template.rsplit(".", 1)
+        if len(parts) == 0:
+            parts.append("")
         parts[1] = "." + parts[1]
 
     if len(parts) != 2:
         raise ValueError("Invalid file template")
 
-    return f"{parts[0]}%05s{parts[1]}"
+    return f"{parts[0]}%05d{parts[1]}"
 
 
 def get_readable_lines_per_file(lines_per_file: int):
@@ -82,3 +84,18 @@ def get_func_by_name(fn_name):
         module = getattr(module, clazz)
 
     return getattr(module, fn)
+
+
+class fake_tqdm:
+
+    def __init__(self):
+        pass
+
+    def update(self, index: int):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return self

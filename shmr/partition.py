@@ -1,8 +1,7 @@
 import contextlib
-import pickle
-from typing import Optional, Callable, Any, Union
+import os
+from typing import Optional, Callable, Any
 
-import orjson
 from tqdm import tqdm
 
 from shmr.misc import get_open_fn, get_func_by_name, get_filepath_template
@@ -31,6 +30,20 @@ class Partition:
             next(f)
         return f
 
+    def _get_outfile(self, outfile):
+        """Get output file
+
+        Returns:
+        """
+        if outfile.find("*") == -1:
+            return outfile
+
+        parts = outfile.rsplit("*", 1)
+        basename = os.path.basename(self.path)
+        stem = os.path.splitext(basename)[0]
+
+        return f"{parts[0]}{stem}{parts[1]}"
+
     def map(self, fn: str, outfile: str, verbose: bool = True):
         """Map
         
@@ -40,6 +53,7 @@ class Partition:
             verbose (bool, optional): [description]. Defaults to True.
         """
         fn = get_func_by_name(fn)
+        outfile = self._get_outfile(outfile)
 
         with self._open() as f, PartitionWriter(outfile) as g:
             for record in tqdm(f, total=self.n_records) if verbose else f:
@@ -49,12 +63,15 @@ class Partition:
                 g.write(record)
                 g.write_new_line()
 
-    def count(self, outfile: str, verbose: bool = True):
+    def count(self, outfile: Optional[str] = None, verbose: bool = True) -> int:
         """Count
-        
+
         Args:
+            outfile (Optional[str], optional): output file to write to the value to if it is not None. if outfile is stdout we will print to stdout
             verbose (bool, optional): [description]. Defaults to True.
-            outfile (str): output file
+
+        Returns:
+            the number of records
         """
         if self.n_records is None:
             n_records = 0
@@ -64,8 +81,15 @@ class Partition:
             PartitionMetadata(self.path).write({"n_records": n_records})
             self.n_records = n_records
 
-        with open(outfile, "w") as f:
-            f.write(str(self.n_records))
+        if outfile is not None:
+            if outfile == "stdout":
+                print(self.n_records)
+            else:
+                outfile = self._get_outfile(outfile)
+                with open(outfile, "w") as f:
+                    f.write(str(self.n_records))
+
+        return self.n_records
 
     def filter(self, fn: str, outfile: str, verbose: bool = True):
         """Filter function
@@ -76,6 +100,8 @@ class Partition:
             verbose (bool, optional): [description]. Defaults to True.
         """
         fn = get_func_by_name(fn)
+        outfile = self._get_outfile(outfile)
+
         with self._open() as f, PartitionWriter(outfile) as g:
             for line in tqdm(f, total=self.n_records) if verbose else f:
                 if fn(self.deser_fn(line)):
@@ -115,7 +141,7 @@ class Partition:
                 partno = bucket_no % num_partitions
                 writers[partno].write(line)
 
-    def reduce(self, fn: str, outfile: str, init_val: Any, verbose: bool = True):
+    def reduce(self, fn: str, outfile: str, init_val: Any = None, verbose: bool = True):
         """Reduce
         
         Args:
@@ -125,16 +151,36 @@ class Partition:
             verbose (bool, optional): [description]. Defaults to True.
         """
         fn = get_func_by_name(fn)
-        with self._open() as f, PartitionWriter(outfile) as g:
-            try:
-                record = self.deser_fn(next(f))
-                accum = fn(init_val, record)
-            except StopIteration:
-                accum = init_val
+        outfile = self._get_outfile(outfile)
+        if init_val is not None:
+            accum = init_val
+        else:
+            accum = None
 
-            for line in tqdm(f, total=self.n_records - 1) if verbose else f:
+        with self._open() as f, PartitionWriter(outfile) as g:
+            if accum is None:
+                try:
+                    record = self.deser_fn(next(f))
+                    accum = fn(record)
+                except StopIteration:
+                    pass
+
+            for line in tqdm(f, total=self.n_records - 1 if self.n_records is not None else None) if verbose else f:
                 record = self.deser_fn(line)
-                accum = fn(accum, record)
+                accum = fn(record, accum)
 
             g.write(self.ser_fn(accum))
             g.write_new_line()
+
+    def head(self, n_rows: int):
+        """Print first n rows
+
+        Args:
+            n_rows (int): number of rows to print
+        """
+        with self._open() as f:
+            try:
+                for i in range(n_rows):
+                    print(next(f))
+            except StopIteration:
+                return

@@ -11,7 +11,7 @@ class PeopleFunc:
         return int(row[3])
 
     @staticmethod
-    def sum_age(accum, row):
+    def sum_age(row, accum=0):
         return PeopleFunc.get_age(row) + accum
 
 
@@ -46,8 +46,7 @@ def test_reduce(people):
               "shmr.str_dumps",
               "partition.reduce",
               "--fn", "tests.test_partition.PeopleFunc.sum_age",
-              "--outfile", temp.name,
-              "--init_val", "0"])
+              "--outfile", temp.name])
 
         temp.seek(0)
         assert int(temp.read().decode()) == 5047
