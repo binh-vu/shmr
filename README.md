@@ -63,9 +63,9 @@ optional arguments:
                      current partition
 ```
 
-### Automated partition naming
+### Automatic partition naming
 
-There are some variables you can be used in naming the output partitions:
+There are some variables you can use in naming the output partitions:
 
 1. `{stem}`: will be replaced by the stem of the current mapping partition
 2. `{auto}`: an incremental number of the new partition
