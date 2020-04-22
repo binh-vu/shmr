@@ -4,7 +4,7 @@ from typing import Optional, Callable, Any
 
 from tqdm import tqdm
 
-from shmr.misc import get_open_fn, get_func_by_name, get_filepath_template
+from shmr.misc import get_open_fn, get_func_by_name, create_filepath_template
 from shmr.partition_writer import PartitionWriter, PartitionMetadata
 
 
@@ -23,6 +23,7 @@ class Partition:
         self.skip_nrows = skip_nrows
 
         self.n_records: Optional[int] = metadata.get("n_records", None)
+        self.stem = os.path.splitext(os.path.basename(self.path))[0]
 
     def _open(self):
         f = get_open_fn(self.path)(self.path, "rb")
@@ -30,30 +31,16 @@ class Partition:
             next(f)
         return f
 
-    def _get_outfile(self, outfile):
-        """Get output file
-
-        Returns:
-        """
-        if outfile.find("*") == -1:
-            return outfile
-
-        parts = outfile.rsplit("*", 1)
-        basename = os.path.basename(self.path)
-        stem = os.path.splitext(basename)[0]
-
-        return f"{parts[0]}{stem}{parts[1]}"
-
     def map(self, fn: str, outfile: str, verbose: bool = True):
-        """Map
+        """Apply a map function on every record of this partition
         
         Args:
-            fn (str): [description]
-            outfile (str): [description]
-            verbose (bool, optional): [description]. Defaults to True.
+            fn (str): an import path of the map function, which should has this signature: (record: Any) -> Any
+            outfile (str): output file of the new partition, `*` or `{stem}` in the path are placeholders, which will be replaced by the stem (i.e., file name without extension) of the current partition
+            verbose (bool, optional): show the execution progress bar. Defaults to True.
         """
         fn = get_func_by_name(fn)
-        outfile = self._get_outfile(outfile)
+        outfile = create_filepath_template(outfile, True).format(auto=0, stem=self.stem)
 
         with self._open() as f, PartitionWriter(outfile) as g:
             for record in tqdm(f, total=self.n_records) if verbose else f:
@@ -85,7 +72,7 @@ class Partition:
             if outfile == "stdout":
                 print(self.n_records)
             else:
-                outfile = self._get_outfile(outfile)
+                outfile = create_filepath_template(outfile, True).format(auto=0, stem=self.stem)
                 with open(outfile, "w") as f:
                     f.write(str(self.n_records))
 
@@ -101,7 +88,7 @@ class Partition:
             verbose (bool, optional): [description]. Defaults to True.
         """
         fn = get_func_by_name(fn)
-        outfile = self._get_outfile(outfile)
+        outfile = create_filepath_template(outfile, True).format(auto=0, stem=self.stem)
 
         with self._open() as f, PartitionWriter(outfile, on_close_delete_if_empty=delete_on_empty) as g:
             for line in tqdm(f, total=self.n_records) if verbose else f:
@@ -129,15 +116,15 @@ class Partition:
             num_partitions (int): [description]
             verbose (bool, optional): [description]. Defaults to True.
         """
-        outfile = get_filepath_template(outfile)
+        outfile = create_filepath_template(outfile, False)
         fn = get_func_by_name(fn)
 
         with contextlib.ExitStack() as stack, self._open() as f:
             writers = [
-                stack.enter_context(PartitionWriter(outfile % i))
+                stack.enter_context(PartitionWriter(outfile.format(auto=i, stem=self.stem)))
                 for i in range(num_partitions)
             ]
-            for line in tqdm(f) if verbose else f:
+            for line in tqdm(f, total=self.n_records) if verbose else f:
                 bucket_no = fn(self.deser_fn(line))
                 partno = bucket_no % num_partitions
                 writers[partno].write(line)
@@ -152,7 +139,7 @@ class Partition:
             verbose (bool, optional): [description]. Defaults to True.
         """
         fn = get_func_by_name(fn)
-        outfile = self._get_outfile(outfile)
+        outfile = create_filepath_template(outfile, True).format(auto=0, stem=self.stem)
         if init_val is not None:
             accum = init_val
         else:

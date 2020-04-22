@@ -6,20 +6,11 @@ import importlib
 def get_open_fn(infile: str):
     """Get the correct open function for the input file based on its extension. Supported bzip2, gz
 
-    Parameters
-    ----------
-    infile : str
-        the file we wish to open
+    Args:
+        infile (str):  the file we wish to open
 
-    Returns
-    -------
-    Callable
-        the open function that can use to open the file
-
-    Raises
-    ------
-    ValueError
-        when encounter unknown extension
+    Returns:
+        Callable: the open function that can use to open the file
     """
     if infile.endswith(".bz2"):
         return bz2.open
@@ -29,30 +20,31 @@ def get_open_fn(infile: str):
         return open
 
 
-def get_filepath_template(file_template: str):
+def create_filepath_template(intemp: str, output_1partition: bool):
+    """Process the user input's template to a python string that allows us to pass variables' value
+    to get the correct file name.
+
+    There are three variables:
+        1. `{auto}`: an auto-incremental ID of the new partition
+        2. `{stem}`: the stem of current processing partition.
+        3. `{}` or `*`: will be `{auto}` if we are generating multiple partitions, otherwise `{stem}`
+
+    Args:
+        intemp (str): user input's template
+        output_1partition (bool): true if we are generate one partition
+
+    Returns:
+        str: the template that we can use the python string's format function to pass the variables' value
     """
-    Parameters
-    ----------
-    file_template
-        the pattern for the output files, the `*` or `{}` placeholder are reserved for placing the chunk name.
-        if none of the placeholders were specified, the chunk name will be placed before the extensions
-    Returns
-    -------
-    """
-    if file_template.find("*") != -1:
-        parts = file_template.rsplit("*", 1)
-    elif file_template.find("{}") != -1:
-        parts = file_template.split("{}")
+    if output_1partition:
+        default = "{stem}"
     else:
-        parts = file_template.rsplit(".", 1)
-        if len(parts) == 0:
-            parts.append("")
-        parts[1] = "." + parts[1]
+        default = "{auto:05d}"
 
-    if len(parts) != 2:
-        raise ValueError("Invalid file template")
-
-    return f"{parts[0]}%05d{parts[1]}"
+    intemp = intemp.replace("*", default)
+    intemp= intemp.replace("{}", default)
+    intemp = intemp.replace("{auto}", "{auto:05d}")
+    return intemp
 
 
 def get_readable_lines_per_file(lines_per_file: int):
@@ -75,6 +67,14 @@ def get_readable_lines_per_file(lines_per_file: int):
 
 
 def get_func_by_name(fn_name):
+    """Automatically import function by its name
+
+    Args:
+        fn_name (str): import path of a function
+
+    Returns:
+        Callable: a python function
+    """
     module, fn = fn_name.rsplit(".", 1)
     try:
         module = importlib.import_module(module)

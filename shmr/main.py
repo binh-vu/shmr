@@ -50,7 +50,7 @@ def build_subparser(subparsers, program, fn, ignore_params: Set[str]):
         for p in doc.params
     }
 
-    parser = subparsers.add_parser(program, help=doc.short_description)
+    parser = subparsers.add_parser(program, description=doc.short_description, help=doc.short_description)
     it = iter(signature.parameters.values())
     assert next(it).name == 'self'
     for param in it:

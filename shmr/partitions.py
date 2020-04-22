@@ -1,4 +1,3 @@
-import contextlib
 import glob
 from math import ceil
 from pathlib import Path
@@ -6,7 +5,7 @@ from typing import Optional, List, Callable, Any
 
 from tqdm.auto import tqdm
 
-from shmr.misc import get_filepath_template, get_func_by_name, fake_tqdm
+from shmr.misc import create_filepath_template, get_func_by_name, fake_tqdm
 from shmr.partition import Partition
 from shmr.partition_writer import PartitionWriter
 
@@ -67,9 +66,10 @@ class ListPartition:
         Raises:
             ValueError: if the output directory does not exist
         """
-        outfile = get_filepath_template(outfile)
-        if not Path(outfile).parent.exists():
-            raise ValueError(f"Output directory does not exist: {Path(outfile).parent}")
+        outfile = create_filepath_template(outfile, False)
+        outdir = Path(outfile.format(stem="", auto=0)).parent
+        if not outdir.exists():
+            raise ValueError(f"Output directory does not exist: {outdir}")
 
         if records_per_partition is None:
             assert num_partitions is not None
@@ -82,7 +82,8 @@ class ListPartition:
 
         with (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
             try:
-                writer = PartitionWriter(outfile % part_counter, on_close_delete_if_empty=True).open()
+                writer = PartitionWriter(outfile.format(auto=part_counter, stem=""),
+                                         on_close_delete_if_empty=True).open()
                 for inpart in self.partitions:
                     with inpart._open() as f:
                         for i, line in enumerate(f):
@@ -92,7 +93,8 @@ class ListPartition:
                             if (i + 1) % records_per_partition == 0:
                                 writer.close()
                                 part_counter += 1
-                                writer = PartitionWriter(outfile % part_counter, on_close_delete_if_empty=True).open()
+                                writer = PartitionWriter(outfile.format(auto=part_counter, stem=""),
+                                                         on_close_delete_if_empty=True).open()
 
             finally:
                 if writer is not None:
@@ -108,6 +110,7 @@ class ListPartition:
         Returns:
             ValueError: if the output directory does not exist
         """
+        outfile = create_filepath_template(outfile, False).format(auto=0, stem="")
         with PartitionWriter(outfile) as g, (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
             for inpart in self.partitions:
                 with inpart._open() as f:
@@ -130,6 +133,7 @@ class ListPartition:
         else:
             accum = None
 
+        outfile = create_filepath_template(outfile, False).format(auto=0, stem="")
         with PartitionWriter(outfile) as g, (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
             for inpart in self.partitions:
                 with inpart._open() as f:
