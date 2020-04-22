@@ -31,11 +31,12 @@ class ListPartition:
             size += part.n_records
         return size
 
-    def count(self, outfile: Optional[str] = None, verbose: bool = True):
+    def count(self, outfile: Optional[str] = None, auto_mkdir: bool = False, verbose: bool = True):
         """Count the number of records in all partitions
 
         Args:
             outfile (Optional[str], optional): output file to write to the value to if it is not None. if outfile is stdout we will print to stdout
+            auto_mkdir (bool, optional): automatically create directory if the directory of the output file does not exist. Defaults to False
             verbose (bool): print the execution progress
         """
         if self.size is None:
@@ -47,13 +48,19 @@ class ListPartition:
             if outfile == "stdout":
                 print(self.size)
             else:
+                if not Path(outfile).parent.exists():
+                    if auto_mkdir:
+                        Path(outfile).parent.mkdir(parents=True)
+                    else:
+                        raise ValueError(f"Output directory does not exist: {Path(outfile).parent}")
+
                 with open(outfile, "w") as f:
                     f.write(str(self.size))
 
         return self.size
 
     def coalesce(self, outfile: str, records_per_partition: Optional[int] = None,
-                 num_partitions: Optional[int] = None, verbose: bool = True):
+                 num_partitions: Optional[int] = None, auto_mkdir: bool = False, verbose: bool = True):
         """The current partitions are coalesce into `num_partitions` partitions. If `num_partitions` is not specified, it will be figure out automatically
         from `records_per_partition`.
         
@@ -61,29 +68,25 @@ class ListPartition:
             outfile (str): path template of output partitions
             records_per_partition (Optional[int], optional): number of records per partition. Defaults to None.
             num_partitions (Optional[int], optional): number of partitions. Defaults to None.
+            auto_mkdir (bool, optional): automatically create directory if the directory of the output file does not exist. Defaults to False
             verbose (bool, optional): log execution progress. Defaults to True.
         
         Raises:
             ValueError: if the output directory does not exist
         """
         outfile = create_filepath_template(outfile, False)
-        outdir = Path(outfile.format(stem="", auto=0)).parent
-        if not outdir.exists():
-            raise ValueError(f"Output directory does not exist: {outdir}")
-
         if records_per_partition is None:
             assert num_partitions is not None
             assert self.size is not None, "Cannot determine the records per partition based on number of partitions because of unknown size of partitions. Consider running partition.count or provide the `records_per_partition` parameter"
             records_per_partition = ceil(self.size / num_partitions)
 
-        part_counter = 0
-
         writer = None
+        part_counter = 0
 
         with (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
             try:
                 writer = PartitionWriter(outfile.format(auto=part_counter, stem=""),
-                                         on_close_delete_if_empty=True).open()
+                                         on_close_delete_if_empty=True, auto_mkdir=auto_mkdir).open()
                 for inpart in self.partitions:
                     with inpart._open() as f:
                         for i, line in enumerate(f):
@@ -100,31 +103,33 @@ class ListPartition:
                 if writer is not None:
                     writer.close()
 
-    def concat(self, outfile: str, verbose: bool = True):
+    def concat(self, outfile: str, auto_mkdir: bool = False, verbose: bool = True):
         """Concatenate partitions to one file
 
         Args:
             outfile (str): path to output partition
+            auto_mkdir (bool, optional): automatically create directory if the directory of the output file does not exist. Defaults to False
             verbose (bool): log execution progress. Defaults to True
 
         Returns:
             ValueError: if the output directory does not exist
         """
         outfile = create_filepath_template(outfile, False).format(auto=0, stem="")
-        with PartitionWriter(outfile) as g, (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
+        with PartitionWriter(outfile, auto_mkdir=auto_mkdir) as g, (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
             for inpart in self.partitions:
                 with inpart._open() as f:
                     for line in f:
                         g.write(line)
                         pbar.update(1)
 
-    def reduce(self, fn: str, outfile: str, init_val: Any = None, verbose: bool = True):
+    def reduce(self, fn: str, outfile: str, init_val: Any = None, auto_mkdir: bool = False, verbose: bool = True):
         """Reduce
 
         Args:
             fn (str): [description]
             outfile (str): [description]
             init_val (Any): [description]
+            auto_mkdir (bool, optional): automatically create directory if the directory of the output file does not exist. Defaults to False
             verbose (bool, optional): [description]. Defaults to True.
         """
         fn = get_func_by_name(fn)
@@ -134,7 +139,7 @@ class ListPartition:
             accum = None
 
         outfile = create_filepath_template(outfile, False).format(auto=0, stem="")
-        with PartitionWriter(outfile) as g, (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
+        with PartitionWriter(outfile, auto_mkdir=auto_mkdir) as g, (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
             for inpart in self.partitions:
                 with inpart._open() as f:
                     if accum is None:

@@ -55,13 +55,13 @@ def test_reduce(people):
         assert int(temp.read().decode()) == 5047
 
 
-def test_group_by(people, resource_dir):
+def test_split_by_key(people, resource_dir):
     tmp_dir = resource_dir / str(uuid4())
     tmp_dir.mkdir(exist_ok=True)
     main(["-i", people[0], "--skip_nrows", "1",
           "-d", "shmr.csv_loads", "-s",
           "shmr.str_dumps",
-          "partition.group_by",
+          "partition.split_by_key",
           "--fn", "tests.test_partition.PeopleFunc.get_age",
           "--num_partitions", "5",
           "--outfile", str(tmp_dir / "*.csv")])

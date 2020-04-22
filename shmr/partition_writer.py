@@ -7,9 +7,12 @@ from shmr.misc import get_open_fn
 
 
 class PartitionWriter:
-    def __init__(self, outfile: str, on_close_delete_if_empty: bool = False):
+    def __init__(self, outfile: str, on_close_delete_if_empty: bool = False, auto_mkdir: bool = False):
         if not Path(outfile).parent.exists():
-            raise ValueError(f"Output directory does not exist: {Path(outfile).parent}")
+            if auto_mkdir:
+                Path(outfile).parent.mkdir(parents=True)
+            else:
+                raise ValueError(f"Output directory does not exist: {Path(outfile).parent}")
 
         self.outfile = outfile
         self.n_records = 0
