@@ -20,7 +20,7 @@ A set of high-order map-reduce functions
 
 ## Introduction
 
-The goal of this library is to make it easier to process large data in parallel while not spending lots of time writing code. The typical workflow of this library is to split a huge file into smaller partitions and process each partition in parallel as the map-reduce framework. However, it does not require any setup as Spark or Hadoop except for one simple `pip` installation command. It is more suitable for the research environment than for the production environment.
+The goal of this library is to make it easier to process large data in parallel while not spending lots of time writing code. The typical workflow of this library is to split a huge file into smaller partitions and process each partition in parallel as the map-reduce framework. However, it does not require any setup as Spark or Hadoop except for one simple `pip` installation command. It is more suitable if you want to do something quick (and just one time).
 
 ### Usage
 
@@ -82,14 +82,13 @@ Below are some examples:
 1. Split one file (partition) to multiple files (partitions)
 
 ```bash
-python -m shmr -i <file_path> partitions.coalesce --outfile <output_files> --num_partitions=128
+shmr -i <file_path> partitions.coalesce --outfile <output_files> --num_partitions=128
 ```
 
 2. Parallel applying a mapping function
 
 ```bash
-ls <input_files> | xargs -n 1 -I {} -P <n_threads> python -m shmr \
-    -i {} partition.map --fn <func> --outfile <output_file>
+ls <input_files> | xargs -n 1 -I{} -P <n_threads> shmr -i {} partition.map --fn <func> --outfile <output_file>
 ```
 
 If you provide the `-v`, it will show the progression bar telling you how long it will take to process one partition.

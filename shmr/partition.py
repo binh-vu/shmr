@@ -32,45 +32,18 @@ class Partition:
             next(f)
         return f
 
-    def map(self, fn: str, outfile: str, auto_mkdir: bool = False, verbose: bool = True):
-        """Apply a map function on every record of this partition
-        
-        Args:
-            fn (str): an import path of the map function, which should has this signature: (record: Any) -> Any
-            outfile (str): output file of the new partition, `*` or `{stem}` in the path are placeholders, which will be replaced by the stem (i.e., file name without extension) of the current partition
-            auto_mkdir (bool, optional): automatically create directory if the directory of the output file does not exist. Defaults to False
-            verbose (bool, optional): show the execution progress bar. Defaults to True.
-        """
-        fn = get_func_by_name(fn)
-        outfile = create_filepath_template(outfile, True).format(auto=0, stem=self.stem)
-
-        with self._open() as f, PartitionWriter(outfile, auto_mkdir=auto_mkdir) as g:
-            for record in tqdm(f, total=self.n_records) if verbose else f:
-                record = self.deser_fn(record)
-                record = fn(record)
-                record = self.ser_fn(record)
-                g.write(record)
-                g.write_new_line()
-
-    def flat_map(self, fn: str, outfile: str, auto_mkdir: bool = False, verbose: bool = True):
-        """Apply a flat map function on every record of this partition
+    def head(self, n: int):
+        """Print first n rows
 
         Args:
-            fn (str): an import path of the map function, which should has this signature: (record: Any) -> Any
-            outfile (str): output file of the new partition, `*` or `{stem}` in the path are placeholders, which will be replaced by the stem (i.e., file name without extension) of the current partition
-            auto_mkdir (bool, optional): automatically create directory if the directory of the output file does not exist. Defaults to False
-            verbose (bool, optional): show the execution progress bar. Defaults to True.
+            n (int): number of rows to print
         """
-        fn = get_func_by_name(fn)
-        outfile = create_filepath_template(outfile, True).format(auto=0, stem=self.stem)
-
-        with self._open() as f, PartitionWriter(outfile, auto_mkdir=auto_mkdir) as g:
-            for record in tqdm(f, total=self.n_records) if verbose else f:
-                record = self.deser_fn(record)
-                for sub_record in fn(record):
-                    sub_record = self.ser_fn(sub_record)
-                    g.write(sub_record)
-                    g.write_new_line()
+        with self._open() as f:
+            try:
+                for i in range(n):
+                    print(next(f))
+            except StopIteration:
+                return
 
     def count(self, outfile: Optional[str] = None, auto_mkdir: bool = False, verbose: bool = True) -> int:
         """Count
@@ -126,6 +99,58 @@ class Partition:
                     keys.add(key)
                     g.write(line)
 
+    def apply(self, fn: str, verbose: bool = True):
+        """Apply
+
+        Args:
+            fn (str): function
+            verbose (bool, optional): show execution progress. Defaults to True.
+        """
+        fn = get_func_by_name(fn)
+        with self._open() as f:
+            for line in tqdm(f, total=self.n_records) if verbose else f:
+                fn(self.deser_fn(line))
+
+    def map(self, fn: str, outfile: str, auto_mkdir: bool = False, verbose: bool = True):
+        """Apply a map function on every record of this partition
+        
+        Args:
+            fn (str): an import path of the map function, which should has this signature: (record: Any) -> Any
+            outfile (str): output file of the new partition, `*` or `{stem}` in the path are placeholders, which will be replaced by the stem (i.e., file name without extension) of the current partition
+            auto_mkdir (bool, optional): automatically create directory if the directory of the output file does not exist. Defaults to False
+            verbose (bool, optional): show the execution progress bar. Defaults to True.
+        """
+        fn = get_func_by_name(fn)
+        outfile = create_filepath_template(outfile, True).format(auto=0, stem=self.stem)
+
+        with self._open() as f, PartitionWriter(outfile, auto_mkdir=auto_mkdir) as g:
+            for record in tqdm(f, total=self.n_records) if verbose else f:
+                record = self.deser_fn(record)
+                record = fn(record)
+                record = self.ser_fn(record)
+                g.write(record)
+                g.write_new_line()
+
+    def flat_map(self, fn: str, outfile: str, auto_mkdir: bool = False, verbose: bool = True):
+        """Apply a flat map function on every record of this partition
+
+        Args:
+            fn (str): an import path of the map function, which should has this signature: (record: Any) -> Any
+            outfile (str): output file of the new partition, `*` or `{stem}` in the path are placeholders, which will be replaced by the stem (i.e., file name without extension) of the current partition
+            auto_mkdir (bool, optional): automatically create directory if the directory of the output file does not exist. Defaults to False
+            verbose (bool, optional): show the execution progress bar. Defaults to True.
+        """
+        fn = get_func_by_name(fn)
+        outfile = create_filepath_template(outfile, True).format(auto=0, stem=self.stem)
+
+        with self._open() as f, PartitionWriter(outfile, auto_mkdir=auto_mkdir) as g:
+            for record in tqdm(f, total=self.n_records) if verbose else f:
+                record = self.deser_fn(record)
+                for sub_record in fn(record):
+                    sub_record = self.ser_fn(sub_record)
+                    g.write(sub_record)
+                    g.write_new_line()
+
     def filter(self, fn: str, outfile: str, delete_on_empty: bool = False, auto_mkdir: bool = False,
                verbose: bool = True):
         """Filter function
@@ -146,44 +171,9 @@ class Partition:
                 if fn(self.deser_fn(line)):
                     g.write(line)
 
-    def apply(self, fn: str, verbose: bool = True):
-        """Apply
-        
-        Args:
-            fn (str): function
-            verbose (bool, optional): show execution progress. Defaults to True.
-        """
-        fn = get_func_by_name(fn)
-        with self._open() as f:
-            for line in tqdm(f, total=self.n_records) if verbose else f:
-                fn(self.deser_fn(line))
-
-    def split_by_key(self, key_fn: str, outfile: str, num_partitions: int, auto_mkdir: bool = False, verbose: bool = True):
-        """Spit the partition into multiple smaller partitions by key
-        
-        Args:
-            key_fn (str): function
-            outfile (str): outfile
-            num_partitions (int): [description]
-            auto_mkdir (bool, optional): automatically create directory if the directory of the output file does not exist. Defaults to False
-            verbose (bool, optional): [description]. Defaults to True.
-        """
-        outfile = create_filepath_template(outfile, False)
-        key_fn = get_func_by_name(key_fn)
-
-        with contextlib.ExitStack() as stack, self._open() as f:
-            writers = [
-                stack.enter_context(PartitionWriter(outfile.format(auto=i, stem=self.stem), auto_mkdir=auto_mkdir))
-                for i in range(num_partitions)
-            ]
-            for line in tqdm(f, total=self.n_records) if verbose else f:
-                bucket_no = key_fn(self.deser_fn(line))
-                partno = bucket_no % num_partitions
-                writers[partno].write(line)
-
     def reduce(self, fn: str, outfile: str, init_val: Any = None, auto_mkdir: bool = False, verbose: bool = True):
         """Reduce
-        
+
         Args:
             fn (str): [description]
             outfile (str): [description]
@@ -246,51 +236,78 @@ class Partition:
                 g.write(self.ser_fn(value))
                 g.write_new_line()
 
-    def head(self, n: int):
-        """Print first n rows
+    def split_by_key(self, key_fn: str, outfile: str, num_partitions: int, auto_mkdir: bool = False,
+                     verbose: bool = True):
+        """Spit the partition into multiple smaller partitions by key
+        
+        Args:
+            key_fn (str): function
+            outfile (str): outfile
+            num_partitions (int): [description]
+            auto_mkdir (bool, optional): automatically create directory if the directory of the output file does not exist. Defaults to False
+            verbose (bool, optional): [description]. Defaults to True.
+        """
+        outfile = create_filepath_template(outfile, False)
+        key_fn = get_func_by_name(key_fn)
+
+        with contextlib.ExitStack() as stack, self._open() as f:
+            writers = [
+                stack.enter_context(PartitionWriter(outfile.format(auto=i, stem=self.stem), auto_mkdir=auto_mkdir))
+                for i in range(num_partitions)
+            ]
+            for line in tqdm(f, total=self.n_records) if verbose else f:
+                bucket_no = key_fn(self.deser_fn(line))
+                partno = bucket_no % num_partitions
+                writers[partno].write(line)
+
+    def join(self, key_fn: str, outfile: str, partition: str, partition_key_fn: str, partition_skip_nrows: int = 0,
+             partition_deser_fn: str = None, partition_ser_fn: str = None, output_ser_fn: str = None,
+             auto_mkdir: bool = False, verbose: bool = True):
+        """Join two partitions together based on its key.
 
         Args:
-            n (int): number of rows to print
+            key_fn (str): function that extracts key of the current partition
+            outfile (str): the output file
+            partition (str): path to the other partition
+            partition_key_fn (str): function that extracts key of the other partition
+            partition_skip_nrows (int, optional): number of rows to skip, default to be 0
+            partition_deser_fn (str, optional): the deserialization function of other partition, default to be the same as current partition
+            partition_ser_fn (str, optional): the serialization function of other partition, default to be the same as current partition
+            output_ser_fn (str, optional): the serialization function of the output partition, default to be the same as current partition
+            auto_mkdir (bool, optional): automatically create directory if the directory of the output file does not exist. Defaults to False
+            verbose (bool, optional): whether printing the process bar, default to be true
         """
-        with self._open() as f:
-            try:
-                for i in range(n):
-                    print(next(f))
-            except StopIteration:
-                return
+        if partition_deser_fn is None:
+            partition_deser_fn = self.deser_fn
+        else:
+            partition_deser_fn = get_func_by_name(partition_deser_fn)
 
-    def join(self, key_fn: str, outfile: str, partition: str, partition_key_fn: str, partition_skip_nrows: int = None,
-             partition_deser_fn: str = None, partition_ser_fn: str = None, verbose: str = True):
-        """Join
+        if partition_ser_fn is None:
+            partition_ser_fn = self.ser_fn
+        else:
+            partition_ser_fn = get_func_by_name(partition_ser_fn)
 
-        Args:
-            key_fn:
-            outfile:
-            partition:
-            partition_key_fn:
-            partition_skip_nrows:
-            partition_deser_fn:
-            partition_ser_fn:
-            verbose:
-        """
-        partition_deser_fn = get_func_by_name(partition_deser_fn)
-        partition_ser_fn = get_func_by_name(partition_ser_fn)
+        if output_ser_fn is None:
+            output_ser_fn = self.ser_fn
+        else:
+            output_ser_fn = get_func_by_name(output_ser_fn)
 
         key_fn = get_func_by_name(key_fn)
         partition_key_fn = get_func_by_name(partition_key_fn)
+        outfile = create_filepath_template(outfile, True).format(auto=0, stem=self.stem)
 
         other = Partition(partition, partition_deser_fn, partition_ser_fn, partition_skip_nrows)
         with self._open() as f, other._open() as g:
             join = {}
             used_keys = set()
 
-            for line in f:
+            for line in tqdm(f, total=self.n_records, desc="process part 0") if verbose else f:
                 record = self.deser_fn(line)
                 key = key_fn(record)
                 join[key] = [record]
                 used_keys.add(key)
 
-            for line in g:
+            for line in tqdm(g, total=other.n_records, desc="process part 1") if verbose else g:
                 record = partition_deser_fn(line)
                 key = partition_key_fn(record)
                 if key in join:
@@ -300,5 +317,7 @@ class Partition:
             for key in used_keys:
                 join.pop(key)
 
-            for r1, r2 in join.values():
-                self.deser_fn(r1, r2)
+            with PartitionWriter(outfile, auto_mkdir=auto_mkdir) as k:
+                for r in tqdm(join.values(), total=len(join), desc="writing result") if verbose else join.values():
+                    k.write(output_ser_fn(r))
+                    k.write_new_line()

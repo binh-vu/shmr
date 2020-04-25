@@ -31,6 +31,25 @@ class ListPartition:
             size += part.n_records
         return size
 
+    def head(self, n: int):
+        """Print first n rows
+
+        Args:
+            n (int): number of rows to print
+        """
+        count = 0
+        for inpart in self.partitions:
+            if count >= n:
+                break
+
+            with inpart._open() as f:
+                for line in f:
+                    print(line)
+                    count += 1
+
+                    if count >= n:
+                        break
+
     def count(self, outfile: Optional[str] = None, auto_mkdir: bool = False, verbose: bool = True):
         """Count the number of records in all partitions
 
@@ -115,7 +134,8 @@ class ListPartition:
             ValueError: if the output directory does not exist
         """
         outfile = create_filepath_template(outfile, False).format(auto=0, stem="")
-        with PartitionWriter(outfile, auto_mkdir=auto_mkdir) as g, (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
+        with PartitionWriter(outfile, auto_mkdir=auto_mkdir) as g, (
+        tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
             for inpart in self.partitions:
                 with inpart._open() as f:
                     for line in f:
@@ -139,7 +159,8 @@ class ListPartition:
             accum = None
 
         outfile = create_filepath_template(outfile, False).format(auto=0, stem="")
-        with PartitionWriter(outfile, auto_mkdir=auto_mkdir) as g, (tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
+        with PartitionWriter(outfile, auto_mkdir=auto_mkdir) as g, (
+        tqdm(total=self.size) if verbose else fake_tqdm()) as pbar:
             for inpart in self.partitions:
                 with inpart._open() as f:
                     if accum is None:
@@ -158,22 +179,3 @@ class ListPartition:
 
             g.write(self.ser_fn(accum))
             g.write_new_line()
-
-    def head(self, n: int):
-        """Print first n rows
-
-        Args:
-            n (int): number of rows to print
-        """
-        count = 0
-        for inpart in self.partitions:
-            if count >= n:
-                break
-
-            with inpart._open() as f:
-                for line in f:
-                    print(line)
-                    count += 1
-
-                    if count >= n:
-                        break
