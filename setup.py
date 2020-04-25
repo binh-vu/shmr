@@ -21,5 +21,6 @@ setup(name="shmr",
       url="https://github.com/binh-vu/shmr",
       python_requires='>3.6',
       license="MIT",
-      install_requires=['orjson', 'tqdm', 'docstring-parser>=0.6', 'fastnumbers'],
+      install_requires=['orjson', 'tqdm', 'docstring-parser>=0.6', 'fastnumbers', 'cityhash'],
+      scripts=["bin/shmr"],
       package_data={'': ['*.so', '*.pyd']})

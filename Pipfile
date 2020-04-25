@@ -12,6 +12,7 @@ orjson = "*"
 tqdm = "*"
 docstring-parser = "*"
 fastnumbers = "*"
+cityhash = "*"
 
 [requires]
 python_version = "3.7"

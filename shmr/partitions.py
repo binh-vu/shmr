@@ -159,15 +159,15 @@ class ListPartition:
             g.write(self.ser_fn(accum))
             g.write_new_line()
 
-    def head(self, n_rows: int):
+    def head(self, n: int):
         """Print first n rows
 
         Args:
-            n_rows (int): number of rows to print
+            n (int): number of rows to print
         """
         count = 0
         for inpart in self.partitions:
-            if count >= n_rows:
+            if count >= n:
                 break
 
             with inpart._open() as f:
@@ -175,5 +175,5 @@ class ListPartition:
                     print(line)
                     count += 1
 
-                    if count >= n_rows:
+                    if count >= n:
                         break

@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+
+set -o noglob
+
+if [[ -z "${EXEC_DIR}" ]]; then
+    echo "Execution directory is not defined. Exit"
+    exit -1
+fi
+
+if [[ -z "${EXEC_DIR}" ]]; then
+    NUM_PARTITIONS=128
+fi
+
+#########################################################
+# define functions
+
+if hash parallel 2>/dev/null; then
+    parallel_cmd="parallel --bar -q -I,,"
+else
+    parallel_cmd="xargs -n 1 -P 8 -I,,"
+fi
+
+function map () {
+    local skip_nrows=$1
+    local auto_mkdir=$2
+    local deser_fn=$3
+    local ser_fn=$4
+    local verbose=$5
+    local infiles=$6
+    local outfiles=$7
+    local fn=$8
+
+    if [ "$verbose" = "-" ]; then
+        local verbose=""
+    fi
+
+    if [ "$auto_mkdir" = "True" ]; then
+        local auto_mkdir="--auto_mkdir"
+    else
+        local auto_mkdir=""
+    fi
+
+    set +o noglob
+
+    ls ${infiles} | ${parallel_cmd} python -m shmr \
+        -d ${deser_fn} -s ${ser_fn} --skip_nrows ${skip_nrows} -i ,, \
+        partition.map --fn ${fn} --outfile ${outfiles} ${auto_mkdir}
+}
+
+function flat_map () {
+    local skip_nrows=$1
+    local auto_mkdir=$2
+    local deser_fn=$3
+    local ser_fn=$4
+    local verbose=$5
+    local infiles=$6
+    local outfiles=$7
+    local fn=$8
+
+    if [ "$verbose" = "-" ]; then
+        local verbose=""
+    fi
+
+    if [ "$auto_mkdir" = "True" ]; then
+        local auto_mkdir="--auto_mkdir"
+    else
+        local auto_mkdir=""
+    fi
+
+    set +o noglob
+
+    ls ${infiles} | ${parallel_cmd} python -m shmr \
+        -d ${deser_fn} -s ${ser_fn} --skip_nrows ${skip_nrows} -i ,, \
+        partition.flat_map --fn ${fn} --outfile ${outfiles} ${auto_mkdir}
+}
+
+function filter {
+    local skip_nrows=$1
+    local auto_mkdir=$2
+    local deser_fn=$3
+    local ser_fn=$4
+    local verbose=$5
+    local infiles=$6
+    local outfiles=$7
+    local fn=$8
+
+    if [ "$verbose" = "-" ]; then
+        local verbose=""
+    fi
+
+    if [ "$auto_mkdir" = "True" ]; then
+        local auto_mkdir="--auto_mkdir"
+    else
+        local auto_mkdir=""
+    fi
+
+    set +o noglob
+
+    ls ${infiles} | ${parallel_cmd} python -m shmr \
+        -d ${deser_fn} -s ${ser_fn} --skip_nrows ${skip_nrows} -i ,, \
+        partition.filter --fn ${fn} --outfile ${outfiles} ${auto_mkdir}
+}
+
+function distinct {
+    local skip_nrows=$1
+    local auto_mkdir=$2
+    local deser_fn=$3
+    local ser_fn=$4
+    local verbose=$5
+    local infiles=$6
+    local outfiles=$7
+    local key_fn=$8
+
+    if [ "$verbose" = "-" ]; then
+        local verbose=""
+    fi
+
+    if [ "$auto_mkdir" = "True" ]; then
+        local auto_mkdir="--auto_mkdir"
+    else
+        local auto_mkdir=""
+    fi
+
+    set +o noglob
+
+    rm -rf ${EXEC_DIR}/s0
+    rm -rf ${EXEC_DIR}/s1
+
+    # split by keys
+    ls ${infiles} | $parallel_cmd python -m shmr -i ,, -d $deser_fn -s $ser_fn \
+        partition.split_by_key --fn $key_fn --outfile ${EXEC_DIR}/s0/{stem}/{auto}.gz --num_partitions $NUM_PARTITIONS ${auto_mkdir}
+
+    # concat different partitions
+    seq -f %05g 0 $((NUM_PARTITIONS-1)) | $parallel_cmd python -m shmr -i $EXEC_DIR/s0/'*'/,,.gz -d $deser_fn -s $ser_fn \
+        partitions.concat --outfile ${EXEC_DIR}/s1/*.gz
+
+    ls ${EXEC_DIR}/s1/*.gz | $parallel_cmd python -m shmr -i ,, -d $deser_fn -s $ser_fn \
+        partition.distinct --outfile $outfiles
+}
+
+function split_by_key {
+    local skip_nrows=$1
+    local auto_mkdir=$2
+    local deser_fn=$3
+    local ser_fn=$4
+    local verbose=$5
+    local infiles=$6
+    local outfiles=$7
+    local key_fn=$8
+    local num_partitions=$9
+
+    if [ "$verbose" = "-" ]; then
+        local verbose=""
+    fi
+
+    if [ "$auto_mkdir" = "True" ]; then
+        local auto_mkdir="--auto_mkdir"
+    else
+        local auto_mkdir=""
+    fi
+
+    set +o noglob
+    rm -rf ${EXEC_DIR}/s0
+
+    # split by keys
+    ls ${infiles} | $parallel_cmd python -m shmr -i ,, -d $deser_fn -s $ser_fn \
+        partition.split_by_key --fn $key_fn --outfile ${EXEC_DIR}/s0/{stem}/{auto}.gz --num_partitions $num_partitions ${auto_mkdir}
+
+    # concat different partitions
+    seq -f %05g 0 $((num_partitions-1)) | $parallel_cmd python -m shmr -i $EXEC_DIR/s0/'*'/,,.gz partitions.concat --outfile $outfiles
+}
+
+#########################################################
+# extract
+
+command=$1
+shift
+
+$command $(python -m shmr.bash_main $command $@)

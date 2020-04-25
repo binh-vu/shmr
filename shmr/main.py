@@ -92,7 +92,7 @@ def build_subparser(subparsers, program, fn, ignore_params: Set[str]):
 def build_parser():
     global CLASSES
 
-    parser = ArgumentParser(prog=f"sh map-reduce ({__version__})")
+    parser = ArgumentParser(prog=f"sh map-reduce low-level API ({__version__})")
     parser.add_argument("-v", "--verbose", action='count', default=0, help="")
     parser.add_argument("-i", "--infile", required=True,
                         help="the path to one partition or list of partitions depend on the sub-program")

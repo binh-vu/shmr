@@ -62,7 +62,7 @@ def test_split_by_key(people, resource_dir):
           "-d", "shmr.csv_loads", "-s",
           "shmr.str_dumps",
           "partition.split_by_key",
-          "--fn", "tests.test_partition.PeopleFunc.get_age",
+          "--key_fn", "tests.test_partition.PeopleFunc.get_age",
           "--num_partitions", "5",
           "--outfile", str(tmp_dir / "*.csv")])
 

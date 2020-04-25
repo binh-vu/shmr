@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "ca30b98ecee4e2e3972244cc7f32f22ae01af627bca79777146bb3ecc9fe8b7c"
+            "sha256": "7ccb89695c1f6dfbdde5f055080cfe52d2901361c890eecb83d161fa72a98d48"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -16,6 +16,13 @@
         ]
     },
     "default": {
+        "cityhash": {
+            "hashes": [
+                "sha256:aa8919c00e8d8699df42dd788eda4f24ad13086ea9d83407fd7da4a0206d9d18"
+            ],
+            "index": "pypi",
+            "version": "==0.2.3.post9"
+        },
         "docstring-parser": {
             "hashes": [
                 "sha256:c2e6d0528f371e57c3c87a103b7cc331e8c15433fa5f315a4298b98dd6d9b788"
